@@ -35,6 +35,36 @@ import time
 # In[7]:
 
 
+N = norm.cdf
+
+def BS_CALL(S, K, T, r, sigma):
+    d1 = (np.log(S/K) + (r + sigma**2/2)*T) / (sigma*np.sqrt(T))
+    d2 = d1 - sigma * np.sqrt(T)
+    return S * N(d1) - K * np.exp(-r*T)* N(d2)
+
+def BS_PUT(S, K, T, r, sigma):
+    d1 = (np.log(S/K) + (r + sigma**2/2)*T) / (sigma*np.sqrt(T))
+    d2 = d1 - sigma* np.sqrt(T)
+    return K*np.exp(-r*T)*N(-d2) - S*N(-d1)    
+    
+def implied_vol(opt_value, S, K, T, r, type_='call'):
+    
+    def call_obj(sigma):
+        return abs(BS_CALL(S, K, T, r, sigma) - opt_value)
+    
+    def put_obj(sigma):
+        return abs(BS_PUT(S, K, T, r, sigma) - opt_value)
+    
+    if type_ == 'call':
+        res = minimize_scalar(call_obj, bounds=(0.01,20), method='bounded')
+        return res.x
+    elif type_ == 'put':
+        res = minimize_scalar(put_obj, bounds=(0.01,20),
+                              method='bounded')
+        return res.x
+    else:
+        raise ValueError("type_ must be 'put' or 'call'")
+        
 def phi(u, S0, K, tau, r,d, v0, theta, rho, kappa, sigma):
     alpha_hat = -0.5 * u * (u + 1j)
     beta = kappa - 1j * u * sigma * rho
@@ -69,243 +99,9 @@ def H_call(S0, K, tau, r,d, v0, theta, rho, kappa, sigma,lambd):
         i.append(res)
         c = c+1
     return S0 * np.exp(-d*tau) - K * np.exp(-r*tau)/np.pi*i       
-print(H_callsingle(100, 100, 0.03, 0.2,0, 0.04, 0.04, -0.7, 3, 0.3,0),call_heston_cfsingle1(100, 100, 0.03, 0.2,0, 0.04, 0.04, -0.7, 3, 0.3,0),call_heston_cfsingle(81, 100.2, 1.1, 0.2,0, 0.04, 0.04, -0.7, 3, 0.3,0))
-                                                                                            
+print(H_callsingle(100, 100, 0.03, 0.2,0, 0.04, 0.04, -0.7, 3, 0.3,0))  
 
 
-# In[6]:
-
-
-def call_heston_cf(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
- 
-    if sigma < 0.001:
-        sigma = 0.001
-    
-    def P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma, lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om - 1j, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om * S * np.exp((r - q) * tau))
-        return p.real
-    
-    def P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om)
-        return p.real
-    
-    def cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        a = k*vT
-        b = k + lambd
-    
-        d = np.sqrt((rho * sigma * 1j * om - b)**2 + sigma**2 *
-                    (1j * om + om**2))
-        g = (b - rho * sigma * 1j * om - d) / (b - rho * sigma * 1j * om + d)
-        cf1 = 1j * om * (np.log(S) + (r - q) * tau)
-        cf2 = (a * tau)/ (sigma**2) * ((b - rho * sigma * 1j * om - d)  - 2 * np.log((1 - g * np.exp(-d * tau)) / (1 - g)))
-        cf3 = v0 / sigma**2 * (b - rho * sigma * 1j * om - d) * (1 - np.exp(-d * tau)) / (1 - g * np.exp(-d * tau))
-        return np.exp(cf1 + cf2 + cf3)
-    #if len(X)>1:
-    c=0
-    result = []
-    vP1 = []
-    vP2 = []
-    tol = (X/S)**5/3**r
-    tol[tol< 0.2] = 0.2
-    tol[tol> 10] = 10
-    while len(X)>c:
-        vP1= 0.5 + 1/np.pi * spi.quad(lambda om: P1(om, S, X[c], tau[c], r[c], q, v0, vT, rho, k, sigma,lambd), 0, 80,epsrel = (1.09e-1)/tol[c])[0]
-        vP2= 0.5 + 1/np.pi * spi.quad(lambda om: P2(om, S, X[c], tau[c], r[c], q, v0, vT, rho, k, sigma,lambd), 0, 80,epsrel = (1.09e-1)/tol[c])[0]
-        res = (np.exp(-q * tau[c]) * S * vP1 - np.exp(-r[c] * tau[c]) * X[c] * vP2).real
-        result.append(res)
-        c = c+1
-    #else:
-        #vP1 = 0.5 + 1/np.pi * spi.quad(lambda om: P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), 0, float('inf'))[0]
-        #vP2 = 0.5 + 1/np.pi * spi.quad(lambda om: P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), 0, float('inf'))[0]
-   
-    #result = (np.exp(-q * tau) * S * vP1 - np.exp(-r * tau) * X * vP2).real
-
-    return result
-def call_heston_cfsingle(S, X: np.array, tau, r, q, v0, vT, rho, k, sigma,lambd):
- 
-    if sigma < 0.001:
-        sigma = 0.001
-    
-    def P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma, lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om - 1j, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om * S * np.exp((r - q) * tau))
-        return p.real
-    
-    def P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om)
-        return p.real
-    
-    def cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        a = k*vT
-        b = k + lambd
-    
-        d = np.sqrt((rho * sigma * 1j * om - b)**2 + sigma**2 *
-                    (1j * om + om**2))
-        g = (b - rho * sigma * 1j * om - d) / (b - rho * sigma * 1j * om + d)
-        cf1 = 1j * om * (np.log(S) + (r - q) * tau)
-        cf2 = (a * tau)/ (sigma**2) * ((b - rho * sigma * 1j * om - d)  - 2 * np.log((1 - g * np.exp(-d * tau)) / (1 - g)))
-        cf3 = v0 / sigma**2 * (b - rho * sigma * 1j * om - d) * (1 - np.exp(-d * tau)) / (1 - g * np.exp(-d * tau))
-        return np.exp(cf1 + cf2 + cf3)
-    
-    vP1 = 0.5 + 1/np.pi * spi.quad(lambda om: P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), 0, 80,epsrel = 1.49e-1)[0]
-    vP2 = 0.5 + 1/np.pi * spi.quad(lambda om: P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), 0, 80,epsrel = 1.49e-1)[0]
-    result = np.exp(-q * tau) * S * vP1 - np.exp(-r * tau) * X * vP2
-    return result.real
-def call_heston_cfsingle1(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
- 
-    if sigma < 0.001:
-        sigma = 0.001
-    
-    def P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma, lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om - 1j, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om * S * np.exp((r - q) * tau))
-        return p.real
-    
-    def P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om)
-        return p.real
-    
-    def cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        a = k*vT
-        b = k + lambd
-    
-        d = np.sqrt((rho * sigma * 1j * om - b)**2 + sigma**2 *
-                    (1j * om + om**2))
-        g = (b - rho * sigma * 1j * om - d) / (b - rho * sigma * 1j * om + d)
-        cf1 = 1j * om * (np.log(S) + (r - q) * tau)
-        cf2 = (a * tau)/ (sigma**2) * ((b - rho * sigma * 1j * om - d)  - 2 * np.log((1 - g * np.exp(-d * tau)) / (1 - g)))
-        cf3 = v0 / sigma**2 * (b - rho * sigma * 1j * om - d) * (1 - np.exp(-d * tau)) / (1 - g * np.exp(-d * tau))
-        return np.exp(cf1 + cf2 + cf3)
-    
-    vP1 = 0.5 + 1/np.pi * spi.quad(lambda om: P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), 0, float('inf'))[0]
-    vP2 = 0.5 + 1/np.pi * spi.quad(lambda om: P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), 0, float('inf'))[0]
-    result = np.exp(-q * tau) * S * vP1 - np.exp(-r * tau) * X * vP2
-    if result < 0:
-        result = 0
-    return result
-def call_heston_cf1(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-    
-    if sigma < 0.001:
-        sigma = 0.001
-    def P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma, lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om - 1j, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om * S * np.exp((r - q) * tau))
-        return p.real
-    
-    def P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om)
-        return p.real
-    
-    def cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        a = k*vT
-        b = k + lambd
-    
-        d = np.sqrt((rho * sigma * 1j * om - b)**2 + sigma**2 *
-                    (1j * om + om**2))
-        g = (b - rho * sigma * 1j * om - d) / (b - rho * sigma * 1j * om + d)
-        cf1 = 1j * om * (np.log(S) + (r - q) * tau)
-        cf2 = (a * tau)/ (sigma**2) * ((b - rho * sigma * 1j * om - d)  - 2 * np.log((1 - g * np.exp(-d * tau)) / (1 - g)))
-        cf3 = v0 / sigma**2 * (b - rho * sigma * 1j * om - d) * (1 - np.exp(-d * tau)) / (1 - g * np.exp(-d * tau))
-        return np.exp(cf1 + cf2 + cf3)
-    om = np.linspace(0.01, 100.01, num=100000)
-    vP1 = 0.5 + 1/np.pi * np.trapz(P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), x = om)
-    vP2 = 0.5 + 1/np.pi * np.trapz(P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd), x = om)
-    result = np.exp(-q * tau) * S * vP1 - np.exp(-r * tau) * X * vP2
-
-    return result.real
-
-def call_heston_cfrec(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-    
-    if sigma < 0.001:
-        sigma = 0.001
-    #@njit(float64[:](float64[:]),[float64(float64), float64[:](float64[:]),float64[:](float64[:]),float64[:](float64[:]),float64(float64),float64(float64),float64(float64),float64(float64),float64(float64),float64(float64),float64(float64)])
-    
-    def P1(om, S, X, tau, r, q, v0, vT, rho, k, sigma, lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om - 1j, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om * S * np.exp((r - q) * tau))
-        return p.real
-    
-    def P2(om, S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        p = np.exp(-1j * np.log(X) * om) * cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd) / (1j * om)
-        return p.real
-    
-    def cf_heston(om, S, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        a = k*vT
-        b = k + lambd
-    
-        d = np.sqrt((rho * sigma * 1j * om - b)**2 + sigma**2 *
-                    (1j * om + om**2))
-        g = (b - rho * sigma * 1j * om - d) / (b - rho * sigma * 1j * om + d)
-        cf1 = 1j * om * (np.log(S) + (r - q) * tau)
-        cf2 = (a * tau)/ (sigma**2) * ((b - rho * sigma * 1j * om - d)  - 2 * np.log((1 - g * np.exp(-d * tau)) / (1 - g)))
-        cf3 = v0 / sigma**2 * (b - rho * sigma * 1j * om - d) * (1 - np.exp(-d * tau)) / (1 - g * np.exp(-d * tau))
-        return np.exp(cf1 + cf2 + cf3)
-    
-    
-    def recint1(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        args = (S, X, tau, r, q, v0, vT, rho, k, sigma,lambd)
-    
-        P, umax, N = 0, 100, 1000
-        dphi=umax/N
-        for i in range(1,N):
-           
-           phi = dphi * (2*i + 1)/2 
-           numerator = P1(phi,*args)
-           P += dphi * numerator
-        return P
-    
-       
-    def recint2(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-        args = (S, X, tau, r, q, v0, vT, rho, k, sigma,lambd)
-    
-        P, umax, N = 0, 100, 1000
-        dphi=umax/N 
-        for i in range(1,N):
-           
-           phi = dphi * (2*i + 1)/2 
-           numerator = P2(phi,*args)
-           P += dphi * numerator
-        return P
-    
-    vP1 = 0.5 + 1/np.pi * recint1(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd)
-    vP2 = 0.5 + 1/np.pi * recint2(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd)
-    result = np.exp(-q * tau) * S * vP1 - np.exp(-r * tau) * X * vP2
-    print("1")
-    return result.real
-
-def put_heston_cf(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd):
-    c = call_heston_cf(S, X, tau, r, q, v0, vT, rho, k, sigma,lambd)
-    return X*np.exp(-r*tau)+c-S
-
-
-# In[8]:
-
-
-N = norm.cdf
-
-def BS_CALL(S, K, T, r, sigma):
-    d1 = (np.log(S/K) + (r + sigma**2/2)*T) / (sigma*np.sqrt(T))
-    d2 = d1 - sigma * np.sqrt(T)
-    return S * N(d1) - K * np.exp(-r*T)* N(d2)
-
-def BS_PUT(S, K, T, r, sigma):
-    d1 = (np.log(S/K) + (r + sigma**2/2)*T) / (sigma*np.sqrt(T))
-    d2 = d1 - sigma* np.sqrt(T)
-    return K*np.exp(-r*T)*N(-d2) - S*N(-d1)    
-    
-def implied_vol(opt_value, S, K, T, r, type_='call'):
-    
-    def call_obj(sigma):
-        return abs(BS_CALL(S, K, T, r, sigma) - opt_value)
-    
-    def put_obj(sigma):
-        return abs(BS_PUT(S, K, T, r, sigma) - opt_value)
-    
-    if type_ == 'call':
-        res = minimize_scalar(call_obj, bounds=(0.01,20), method='bounded')
-        return res.x
-    elif type_ == 'put':
-        res = minimize_scalar(put_obj, bounds=(0.01,20),
-                              method='bounded')
-        return res.x
-    else:
-        raise ValueError("type_ must be 'put' or 'call'")
 def get_current_price(symbol):
     ticker = yf.Ticker(symbol)
     historical_prices = ticker.history(period='1d', interval='1m')
@@ -408,9 +204,8 @@ def getcalls(tick, threshold):
    return strikes, price_arr, maturities, volume_arr
 d = 0
 
-def Heston_calibration(ticker,uselambda,mode,treshold,accuracy,allcalls,**kwargs):
+def Heston_calibration(ticker,mode,treshold,accuracy,allcalls,**kwargs):
     #Ticker: Ticker in Yahoo Finance of the stock
-    #UseLambda: If True the parameter lambda will be used in the calibration
     #Mode: 1 For implied volatility calibration; 2 For Price calibration (Recommended); 3 For Implied volatility and Price calibration. Default is 2
     #Treshold: 1/Treshold is the minimum amount of available prices accepted for a maturity given the full list of strikes from all maturities,
     #only available if AllCalls is set to FALSE. Recommended vaues from 3 to 5
@@ -442,10 +237,6 @@ def Heston_calibration(ticker,uselambda,mode,treshold,accuracy,allcalls,**kwargs
     else:
         mode = 2
         factor = 1
-    if uselambda == 'TRUE':
-     lam = 1
-    else:
-     lam = 0
     if allcalls == "FALSE":
      common_strikes, price_arr, maturities, volume_arr = getcalls(ticker,treshold)
      volSurfacevol = pd.DataFrame(volume_arr, index = maturities, columns = common_strikes)
@@ -489,12 +280,12 @@ def Heston_calibration(ticker,uselambda,mode,treshold,accuracy,allcalls,**kwargs
     iv = volSurfaceLong['IV'].to_numpy('float')
     print(np.sum(volSurfaceLong['price']/len(volSurfaceLong['price']))/S0)
     print(volSurfaceLong.to_string())
-    params = {"v0": {"x0": 0.03*l, "lbub": [-1,1]}, 
+    params = {"v0": {"x0": 0.03*l, "lbub": [0,1]}, 
               "kappa": {"x0": 2.7, "lbub": [1e-3,5]},
               "theta": {"x0": 0.05*l**2, "lbub": [1e-3,2]},
               "sigma": {"x0": 0.8*l, "lbub": [1e-2,4]},
               "rho": {"x0": -0.7, "lbub": [-1,0]},
-              "lambd": {"x0": 0.8, "lbub": [lam,lam*-1]},
+              "lambd": {"x0": 0.8, "lbub": [0,0]},
               }
     x0 = [param["x0"] for key, param in params.items()]
     bnds = [param["lbub"] for key, param in params.items()]
@@ -513,7 +304,8 @@ def Heston_calibration(ticker,uselambda,mode,treshold,accuracy,allcalls,**kwargs
          ivh = np.array(ivh)
          errvol = np.sum(((iv-ivh)**2  /len(P))*w)
         if mode == 2 or mode ==3:
-         err = np.sum(((P-PH)**2  /len(P))*w)/np.sum(P/len(P))
+         #err = np.sum(((P-PH)**2  /len(P))*w)/np.sum(P/len(P))
+            err = np.sum(((P-PH)**2  /len(P)))/np.sum(P/len(P))
         if mode == 1:
             optval = errvol
             print(v0, kappa, theta, sigma, rho, lambd,optval)
@@ -555,11 +347,10 @@ def Heston_calibration(ticker,uselambda,mode,treshold,accuracy,allcalls,**kwargs
     return(volSurfaceLong, v0, kappa, theta, sigma, rho, lambd, S0)
     
 
-
 # In[ ]:
 
 
-volSurfaceLong, v0, kappa, theta, sigma, rho, lambd, S0 = Heston_calibration("RACE",'FALSE',2,3,1e-5,"TRUE", Price = None, DivYield = None, Tcutoff = 0.05, Leverage = None, MinVolume = 1)
+volSurfaceLong, v0, kappa, theta, sigma, rho, lambd, S0 = Heston_calibration("RACE",2,4,1e-5,"TRUE", Price = None, DivYield = None, Tcutoff = 0.05, Leverage = None, MinVolume = 1)
 print(volSurfaceLong.to_string())
 c = 0
 tau = volSurfaceLong['maturity']
